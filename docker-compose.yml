@@ -1,0 +1,36 @@
+services:
+  gallery-app:
+    build: .
+    container_name: gallery-app
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./assets:/app/assets
+      - ./qr:/app/qr
+      - ./config.json:/app/config.json:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - party
+
+  cloudflared:
+    container_name: cloudflared
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    depends_on:
+      gallery-app:
+        condition: service_healthy
+    command: ["tunnel", "--no-autoupdate", "--url", "http://gallery-app:3000"]
+    networks:
+      - party
+
+networks:
+  party:
+    driver: bridge

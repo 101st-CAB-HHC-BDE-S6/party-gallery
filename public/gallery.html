@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>the Hofers Christmas 2026 — Gallery</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css">
+<style>
+  html,body{margin:0;height:100%;background:#0a0a0a;color:#fff;font-family:Georgia,serif;overflow:hidden}
+  body.idle{cursor:none}
+  .swiper{width:100vw;height:100vh}
+  .swiper-slide{display:flex;align-items:center;justify-content:center;background:#0a0a0a}
+  .swiper-slide img{max-height:96vh;max-width:96vw;object-fit:contain}
+  .nav{opacity:0;transition:opacity .3s;color:#fff}
+  body.paused .nav{opacity:1}
+  #empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:5}
+  .card{background:#14231c;border:2px solid #8B0000;border-radius:16px;padding:32px;text-align:center;max-width:520px}
+  .card h1{color:#FAF6F0;font-style:italic}
+  .qrs{display:flex;gap:24px;justify-content:center;margin-top:16px}
+  .qrs figure{margin:0}.qrs img{width:150px;height:150px;background:#fff;border-radius:8px}
+  #toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#1B4332;color:#fff;
+    padding:12px 22px;border-radius:999px;opacity:0;transition:opacity .3s;z-index:20}
+  #toast.show{opacity:1}
+  #qrBtn{position:fixed;right:16px;bottom:16px;z-index:15;background:#1B4332;color:#fff;border:1px solid #FAF6F0;
+    border-radius:999px;padding:10px 16px;cursor:pointer}
+  #qrModal{position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;z-index:30}
+  #qrModal.open{display:flex}
+</style>
+</head>
+<body class="idle">
+<div class="swiper" id="swiperEl">
+  <div class="swiper-wrapper" id="wrapper"></div>
+  <div class="swiper-button-prev nav"></div>
+  <div class="swiper-button-next nav"></div>
+</div>
+
+<div id="empty" hidden>
+  <div class="card">
+    <h1>the Hofers Christmas 2026</h1>
+    <p>No photos yet — be the first! Scan a code to share yours.</p>
+    <div class="qrs" id="emptyQrs">
+      <figure><img id="qrUploadEmpty" src="/qr/upload-qr.png" alt="Upload QR" onerror="this.style.display='none'"><figcaption>Share photos</figcaption></figure>
+      <figure><img id="qrBoothEmpty" src="/qr/booth-qr.png" alt="Photo booth QR" onerror="this.style.display='none'"><figcaption>Photo booth</figcaption></figure>
+    </div>
+  </div>
+</div>
+
+<div id="toast">New Photo Added!</div>
+<button id="qrBtn" type="button">Show QR codes</button>
+
+<div id="qrModal" role="dialog" aria-label="QR codes">
+  <div class="card">
+    <h1>Join in</h1>
+    <div class="qrs">
+      <figure><img src="/qr/upload-qr.png" alt="Upload QR" onerror="this.style.display='none'"><figcaption>Share photos</figcaption></figure>
+      <figure><img src="/qr/booth-qr.png" alt="Photo booth QR" onerror="this.style.display='none'"><figcaption>Photo booth</figcaption></figure>
+    </div>
+    <p>Tap anywhere to close</p>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+let config = { slideIntervalMs: 5000, idleResumeMs: 30000, publicUrl: '' };
+let swiper = null;
+let userPaused = false;
+let idleTimer = null;
+
+function slideEl(photo) {
+  const d = document.createElement('div');
+  d.className = 'swiper-slide';
+  const img = document.createElement('img');
+  img.src = photo.url; img.alt = photo.name || 'Event photo';
+  img.style.maxHeight = '96vh'; img.style.maxWidth = '96vw'; img.style.objectFit = 'contain';
+  d.appendChild(img);
+  return d;
+}
+function showToast() {
+  const t = document.getElementById('toast');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+function applyQrVisibility() {
+  // Only render QR images once we have a live public URL.
+  const show = !!config.publicUrl;
+  document.getElementById('emptyQrs').style.display = show ? 'flex' : 'none';
+}
+function pauseAndScheduleResume() {
+  userPaused = true;
+  document.body.classList.add('paused');
+  document.body.classList.remove('idle');
+  if (swiper && swiper.autoplay) swiper.autoplay.stop();
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => {
+    userPaused = false;
+    document.body.classList.remove('paused');
+    document.body.classList.add('idle');
+    if (swiper && swiper.autoplay) swiper.autoplay.start();
+  }, config.idleResumeMs);
+}
+
+async function init() {
+  try { config = { ...config, ...(await (await fetch('/api/config')).json()) }; } catch {}
+  applyQrVisibility();
+  let photos = [];
+  try { photos = await (await fetch('/api/photos')).json(); } catch {}
+  const wrapper = document.getElementById('wrapper');
+  photos.forEach(p => wrapper.appendChild(slideEl(p)));
+  document.getElementById('empty').hidden = photos.length > 0;
+
+  swiper = new Swiper('#swiperEl', {
+    loop: false,
+    navigation: { nextEl: '.swiper-button-next', prevEl: '.swiper-button-prev' },
+    autoplay: { delay: config.slideIntervalMs, disableOnInteraction: false },
+  });
+
+  for (const ev of ['touchstart', 'pointerdown']) {
+    document.addEventListener(ev, pauseAndScheduleResume, { passive: true });
+  }
+  document.getElementById('qrBtn').addEventListener('click', () =>
+    document.getElementById('qrModal').classList.add('open'));
+  document.getElementById('qrModal').addEventListener('click', () =>
+    document.getElementById('qrModal').classList.remove('open'));
+
+  const socket = io();
+  socket.on('new-photo', (photo) => {
+    document.getElementById('empty').hidden = true;
+    if (swiper) {
+      swiper.prependSlide(slideEl(photo));
+      swiper.slideTo(0);
+      if (userPaused === false && swiper.autoplay) swiper.autoplay.start();
+    }
+    showToast();
+  });
+}
+init();
+</script>
+</body>
+</html>

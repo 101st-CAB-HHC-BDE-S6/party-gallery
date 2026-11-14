@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>the Hofers Christmas 2026 — Photo Booth</title>
+<style>
+  body{margin:0;font-family:Georgia,serif;background:#FAF6F0;color:#1B4332;text-align:center;padding:20px}
+  h1{font-style:italic}
+  video{transform:scaleX(-1);width:min(92vw,640px);border:4px solid #1B4332;border-radius:16px;background:#000}
+  .pills{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:12px 0}
+  .pill{border:2px solid #1B4332;background:#fff;color:#1B4332;border-radius:999px;padding:8px 18px;cursor:pointer}
+  .pill.active{background:#1B4332;color:#fff}
+  button.main{background:#8B0000;color:#fff;border:0;border-radius:999px;padding:14px 28px;font-size:19px;cursor:pointer;margin:14px}
+  #count{position:fixed;inset:0;display:none;align-items:center;justify-content:center;font-size:38vw;color:#fff;
+    background:rgba(0,0,0,.45);z-index:10}
+  #flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:11}
+  #flash.on{opacity:1}
+  .card{background:#fff;border:2px solid #8B0000;border-radius:16px;padding:20px;max-width:520px;margin:16px auto}
+  #result img{max-width:min(92vw,420px);border:2px solid #1B4332}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+<h1>the Hofers Christmas 2026 — Photo Booth</h1>
+
+<div id="trouble" class="card" hidden>
+  <h2>Camera unavailable</h2>
+  <p>The photo booth needs camera access, which browsers only allow on a secure
+     (HTTPS) page or your home network address. If you opened this over plain HTTP
+     from outside the house, try the link on the QR code again, allow camera
+     permission when asked, or just use the Share Photos page instead.</p>
+</div>
+
+<p>Layout</p>
+<div class="pills" id="layouts"></div>
+<p>Filter</p>
+<div class="pills" id="filters"></div>
+
+<video id="cam" autoplay playsinline muted></video>
+<div id="count"></div>
+<div id="flash"></div>
+<br>
+<button class="main" id="start" type="button">Start Photo Booth</button>
+<p id="status" role="status"></p>
+
+<div id="result" hidden>
+  <img id="finalImg" alt="Your framed photo booth picture">
+  <p><strong>Hold Image to Save to Phone</strong></p>
+  <button class="main" id="again" type="button">Take Another</button>
+</div>
+
+<script>
+const CELLS = {
+  '1': [{ width: 1000, height: 1180 }],
+  '2': [{ width: 1000, height: 582 }],
+  '4': [{ width: 492, height: 582 }],
+  '6': [{ width: 492, height: 383 }],
+};
+let layout = '4', filter = 'color', stream = null;
+const video = document.getElementById('cam');
+const statusEl = document.getElementById('status');
+
+function pills(el, values, current, onPick) {
+  el.innerHTML = '';
+  values.forEach(([val, label]) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'pill' + (val === current ? ' active' : '');
+    b.textContent = label;
+    b.onclick = () => onPick(val);
+    el.appendChild(b);
+  });
+}
+async function loadConfig() {
+  let cfg = { layouts: { '1': true, '2': true, '4': true, '6': true }, filters: { color: true, bw: true } };
+  try { cfg = await (await fetch('/api/config')).json(); } catch {}
+  const layouts = Object.keys(cfg.layouts || {}).filter(k => cfg.layouts[k]);
+  if (!layouts.includes(layout)) layout = layouts[0] || '1';
+  pills(document.getElementById('layouts'), layouts.map(k => [k, k + (k === '1' ? ' photo' : ' photos')]), layout,
+    (v) => { layout = v; loadPillsOnly(cfg); });
+  loadPillsOnly(cfg);
+}
+function loadPillsOnly(cfg) {
+  const filters = [];
+  if (!cfg || cfg.filters?.color) filters.push(['color', 'Color']);
+  if (!cfg || cfg.filters?.bw) filters.push(['bw', 'B&W']);
+  pills(document.getElementById('filters'), filters, filter, (v) => { filter = v; loadPillsOnly(cfg); });
+  document.querySelectorAll('#layouts .pill').forEach(p =>
+    p.classList.toggle('active', p.textContent.startsWith(layout + ' ')));
+}
+async function startCamera() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    document.getElementById('trouble').hidden = false;
+    return;
+  }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 960 } },
+      audio: false,
+    });
+    video.srcObject = stream;
+  } catch {
+    document.getElementById('trouble').hidden = false;
+  }
+}
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+async function countdown() {
+  const el = document.getElementById('count');
+  el.style.display = 'flex';
+  for (const n of ['3', '2', '1']) { el.textContent = n; await sleep(800); }
+  el.style.display = 'none';
+}
+function capture() {
+  const cell = CELLS[layout][0];
+  const canvas = document.createElement('canvas');
+  canvas.width = cell.width; canvas.height = cell.height;
+  const ctx = canvas.getContext('2d');
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const target = cell.width / cell.height, src = vw / vh;
+  let sw, sh, sx, sy;
+  if (src > target) { sh = vh; sw = vh * target; sx = (vw - sw) / 2; sy = 0; }
+  else { sw = vw; sh = vw / target; sx = 0; sy = (vh - sh) / 2; }
+  ctx.translate(canvas.width, 0); ctx.scale(-1, 1); // un-mirror
+  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.92);
+}
+document.getElementById('start').addEventListener('click', async () => {
+  if (!stream) { document.getElementById('trouble').hidden = false; return; }
+  document.getElementById('result').hidden = true;
+  const shots = [];
+  const count = Number(layout);
+  for (let i = 0; i < count; i++) {
+    statusEl.textContent = `Photo ${i + 1} of ${count} — get ready!`;
+    await countdown();
+    const flash = document.getElementById('flash');
+    flash.classList.add('on'); setTimeout(() => flash.classList.remove('on'), 120);
+    shots.push(capture());
+    await sleep(400);
+  }
+  statusEl.textContent = 'Making your framed picture…';
+  try {
+    const r = await fetch('/api/upload-booth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ images: shots, layout, filter }),
+    });
+    const data = await r.json();
+    if (!r.ok || !data.url) throw new Error(data.error || 'failed');
+    document.getElementById('finalImg').src = data.url;
+    document.getElementById('result').hidden = false;
+    statusEl.textContent = 'Done — it is on the big screen too!';
+  } catch (e) {
+    statusEl.textContent = 'Something went wrong making that one — please try again.';
+  }
+});
+document.getElementById('again').addEventListener('click', () => {
+  document.getElementById('result').hidden = true;
+  statusEl.textContent = '';
+});
+loadConfig();
+startCamera();
+</script>
+</body>
+</html>
