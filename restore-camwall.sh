@@ -65,7 +65,7 @@ stop_recorded_process() {
   fi
 
   stop_process_tree "$pid" "$expected_command"
-  kill "$pid"
+  kill "$pid" 2>/dev/null || true
   for _ in $(seq 1 10); do
     state="$(ps -p "$pid" -o stat= 2>/dev/null || true)"
     [[ -z "$state" || "$state" == Z* ]] && break
