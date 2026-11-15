@@ -6,14 +6,21 @@
 <title>the Hofers Christmas 2026 — Share Your Photos</title>
 <style>
   body{margin:0;font-family:Georgia,serif;background:#FAF6F0;color:#1B4332;text-align:center;padding:24px}
-  h1{font-style:italic}
+  h1{font-style:italic;font-size:clamp(19px,5vw,26px)}
   .box{background:#fff;border:2px solid #1B4332;border-radius:16px;padding:24px;max-width:520px;margin:20px auto}
-  button{background:#8B0000;color:#fff;border:0;border-radius:999px;padding:14px 26px;font-size:18px;cursor:pointer}
+  button{background:#8B0000;color:#fff;border:0;border-radius:999px;padding:14px 26px;font-size:18px;cursor:pointer;font:inherit}
+  button:disabled{opacity:.45;cursor:not-allowed}
   #barWrap{background:#e5ded2;border-radius:999px;height:18px;overflow:hidden;margin:16px 0}
-  #bar{background:#1B4332;height:100%;width:0%}
+  #bar{background:#1B4332;height:100%;width:0%;transition:width .2s}
   #summary{margin:16px 0;font-weight:bold}
-  #summary.ok{color:#1B4332}#summary.partial{color:#8B0000}
+  #summary.ok{color:#1B4332}
+  #summary.partial{color:#8B0000}
   input[type=file]{font-size:16px;margin:16px 0}
+  #files{margin:12px 0;text-align:left;font-size:14px;max-height:180px;overflow:auto}
+  .row{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid #eee}
+  .row .st{white-space:nowrap;font-size:13px;color:#8a8a8a}
+  .row .st.ok{color:#1B4332}
+  .row .st.bad{color:#8B0000}
 </style>
 </head>
 <body>
@@ -21,8 +28,9 @@
 <div class="box">
   <p>Pick photos from your phone and they'll appear on the big screen.</p>
   <input type="file" id="picker" accept="image/*" multiple>
+  <div id="files"></div>
   <div id="barWrap" hidden><div id="bar"></div></div>
-  <p id="status"></p>
+  <p id="status" role="status"></p>
   <p id="summary" role="status"></p>
   <button id="again" type="button" hidden onclick="location.reload()">Add More Photos</button>
 </div>
@@ -33,88 +41,193 @@ const statusEl = document.getElementById('status');
 const summaryEl = document.getElementById('summary');
 const barWrap = document.getElementById('barWrap');
 const bar = document.getElementById('bar');
+const filesEl = document.getElementById('files');
+const CHUNK = 8;
+const MAX_DIM = 2000;
+const QUALITY = 0.85;
+const RETRIES = 3;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function setBar(percent) {
+  barWrap.hidden = percent === null;
+  if (percent !== null) bar.style.width = `${percent}%`;
+}
 
 async function transcode(file) {
-  // Scale longest edge to <= 2400px and re-encode as JPEG 0.90.
-  // If decoding fails (e.g. HEIC in a browser without HEIC support),
-  // return the original File untouched for the server to evaluate.
-  try {
-    let bmp;
-    try { bmp = await createImageBitmap(file); }
-    catch {
-      bmp = await new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = reject;
-        img.src = URL.createObjectURL(file);
-      });
-    }
-    const w = bmp.width, h = bmp.height;
-    if (!w || !h) throw new Error('no dimensions');
-    const scale = Math.min(1, 2400 / Math.max(w, h));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(w * scale);
-    canvas.height = Math.round(h * scale);
-    canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height);
-    if (bmp.close) bmp.close();
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.90));
-    if (!blob) throw new Error('toBlob failed');
-    return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
-  } catch {
-    return file;
+  let bitmap = null;
+  try { bitmap = await createImageBitmap(file); } catch {}
+  if (!bitmap) {
+    bitmap = await new Promise((resolve, reject) => {
+      const image = new Image();
+      const url = URL.createObjectURL(file);
+      image.onload = () => { URL.revokeObjectURL(url); resolve(image); };
+      image.onerror = () => { URL.revokeObjectURL(url); reject(new Error('undecodable')); };
+      image.src = url;
+    });
   }
+
+  const width = bitmap.width || bitmap.naturalWidth;
+  const height = bitmap.height || bitmap.naturalHeight;
+  if (!width || !height) throw new Error('undecodable');
+  const scale = Math.min(1, MAX_DIM / Math.max(width, height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(width * scale);
+  canvas.height = Math.round(height * scale);
+  canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  if (bitmap.close) bitmap.close();
+
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', QUALITY));
+  if (!blob) throw new Error('encode failed');
+  return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+}
+
+function addRow(name) {
+  const row = document.createElement('div');
+  row.className = 'row';
+  const label = document.createElement('span');
+  label.textContent = name;
+  const status = document.createElement('span');
+  status.className = 'st';
+  status.textContent = 'waiting';
+  row.append(label, status);
+  filesEl.appendChild(row);
+  return status;
+}
+
+function send(form, onProgress) {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/upload-general');
+    xhr.timeout = 120000;
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
+    };
+    xhr.onload = () => {
+      let data = {};
+      try { data = JSON.parse(xhr.responseText); } catch {}
+      resolve({
+        status: xhr.status,
+        retryAfter: Number(xhr.getResponseHeader('Retry-After')) || 60,
+        data,
+      });
+    };
+    xhr.onerror = () => resolve({ status: 0, retryAfter: 60, data: {} });
+    xhr.ontimeout = () => resolve({ status: 0, retryAfter: 60, data: {} });
+    xhr.send(form);
+  });
 }
 
 picker.addEventListener('change', async () => {
   const originals = [...picker.files];
   if (!originals.length) return;
+  picker.disabled = true;
+  filesEl.innerHTML = '';
   summaryEl.textContent = '';
   statusEl.textContent = 'Preparing photos…';
+  setBar(null);
+
+  const rows = originals.map((file) => addRow(file.name));
   const prepared = [];
-  for (const f of originals) prepared.push(await transcode(f));
-
-  const form = new FormData();
-  prepared.forEach((f) => form.append('photos', f, f.name));
-
-  const xhr = new XMLHttpRequest();
-  xhr.open('POST', '/api/upload-general');
-  barWrap.hidden = false;
-  xhr.upload.onprogress = (e) => {
-    if (e.lengthComputable) {
-      const pct = Math.round((e.loaded / e.total) * 100);
-      bar.style.width = pct + '%';
-      statusEl.textContent = `Uploading… ${pct}%`;
+  let failed = 0;
+  for (let index = 0; index < originals.length; index += 1) {
+    rows[index].textContent = 'resizing…';
+    try {
+      prepared.push({ file: await transcode(originals[index]), row: rows[index] });
+      rows[index].textContent = 'ready';
+    } catch {
+      rows[index].textContent = 'unreadable';
+      rows[index].className = 'st bad';
+      failed += 1;
     }
-  };
-  xhr.onload = () => {
-    barWrap.hidden = true;
-    let data = {};
-    try { data = JSON.parse(xhr.responseText); } catch {}
-    const saved = data.saved || [];
-    const skipped = data.skipped || [];
-    const total = originals.length;
-    if (xhr.status >= 200 && xhr.status < 300) {
-      if (skipped.length) {
-        summaryEl.className = 'partial';
-        summaryEl.textContent = `${saved.length} of ${total} uploaded — ${skipped.length} unsupported format skipped: ${skipped.join(', ')}`;
-      } else {
-        summaryEl.className = 'ok';
-        summaryEl.textContent = `${saved.length} of ${total} uploaded!`;
-      }
-      statusEl.textContent = 'They should be on the big screen now.';
-    } else {
-      summaryEl.className = 'partial';
-      summaryEl.textContent = data.error || 'Upload failed — please try again.';
-      statusEl.textContent = '';
-    }
-    document.getElementById('again').hidden = false;
-  };
-  xhr.onerror = () => {
-    barWrap.hidden = true;
+  }
+
+  if (!prepared.length) {
+    statusEl.textContent = '';
     summaryEl.className = 'partial';
-    summaryEl.textContent = 'Upload failed — check your connection and try again.';
-  };
-  xhr.send(form);
+    summaryEl.textContent = 'Those formats could not be read. Try JPEG or PNG, or use the Photo Booth.';
+    picker.disabled = false;
+    document.getElementById('again').hidden = false;
+    return;
+  }
+
+  let uploaded = 0;
+  let busy = false;
+  for (let start = 0; start < prepared.length; start += CHUNK) {
+    const slice = prepared.slice(start, start + CHUNK);
+    const form = new FormData();
+    slice.forEach((item) => form.append('photos', item.file, item.file.name));
+    let attempt = 0;
+    let result = null;
+
+    while (attempt <= RETRIES) {
+      result = await send(form, (percent) => {
+        statusEl.textContent = `Uploading… ${percent}% (${start + 1}–${start + slice.length} of ${prepared.length})`;
+        setBar(percent);
+      });
+      if (result.status === 429 && attempt < RETRIES) {
+        attempt += 1;
+        for (let seconds = result.retryAfter; seconds > 0; seconds -= 1) {
+          statusEl.textContent = `Everyone is uploading — retrying in ${seconds}s…`;
+          await sleep(1000);
+        }
+        continue;
+      }
+      if (result.status === 0 && attempt < RETRIES) {
+        attempt += 1;
+        await sleep(1500 * attempt);
+        continue;
+      }
+      break;
+    }
+    setBar(null);
+
+    if (result && result.status >= 200 && result.status < 300) {
+      const countNames = (names) => names.reduce((counts, name) => {
+        counts.set(name, (counts.get(name) || 0) + 1);
+        return counts;
+      }, new Map());
+      const savedNames = countNames(result.data.uploaded || []);
+      const skippedNames = countNames(result.data.skipped || []);
+      slice.forEach((item) => {
+        const savedCount = savedNames.get(item.file.name) || 0;
+        const skippedCount = skippedNames.get(item.file.name) || 0;
+        if (savedCount > 0) {
+          savedNames.set(item.file.name, savedCount - 1);
+          item.row.textContent = 'uploaded';
+          item.row.className = 'st ok';
+          uploaded += 1;
+        } else {
+          if (skippedCount > 0) skippedNames.set(item.file.name, skippedCount - 1);
+          item.row.textContent = skippedCount > 0 ? 'skipped' : 'failed';
+          item.row.className = 'st bad';
+          failed += 1;
+        }
+      });
+    } else {
+      if (result && result.status === 429) busy = true;
+      slice.forEach((item) => {
+        item.row.textContent = 'failed';
+        item.row.className = 'st bad';
+        failed += 1;
+      });
+    }
+  }
+
+  statusEl.textContent = '';
+  if (uploaded === originals.length) {
+    summaryEl.className = 'ok';
+    summaryEl.textContent = `All ${originals.length} uploaded — look at the big screen!`;
+  } else if (uploaded > 0) {
+    summaryEl.className = 'partial';
+    summaryEl.textContent = `${uploaded} of ${originals.length} uploaded. ${failed} could not be sent.`;
+  } else {
+    summaryEl.className = 'partial';
+    summaryEl.textContent = busy
+      ? 'Still too busy — give it a minute and reload this page.'
+      : 'Upload failed — check your signal and try again.';
+  }
+  picker.disabled = false;
+  document.getElementById('again').hidden = false;
 });
 </script>
 </body>

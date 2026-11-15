@@ -4,31 +4,63 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>the Hofers Christmas 2026 — Gallery</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css">
+<link rel="stylesheet" href="/vendor/swiper-bundle.min.css">
 <style>
+  *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:#0a0a0a;color:#fff;font-family:Georgia,serif;overflow:hidden}
   body.idle{cursor:none}
   .swiper{width:100vw;height:100vh}
   .swiper-slide{display:flex;align-items:center;justify-content:center;background:#0a0a0a}
-  .swiper-slide img{max-height:96vh;max-width:96vw;object-fit:contain}
+  .swiper-slide img{width:98vw;height:96vh;object-fit:contain}
   .nav{opacity:0;transition:opacity .3s;color:#fff}
   body.paused .nav{opacity:1}
   #empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:5}
   #empty[hidden]{display:none}
-  .card{background:#14231c;border:2px solid #8B0000;border-radius:16px;padding:32px;text-align:center;max-width:520px}
+  .card{width:min(520px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto;background:#14231c;
+    border:2px solid #8B0000;border-radius:16px;padding:clamp(16px,4vw,32px);text-align:center}
   .card h1{color:#FAF6F0;font-style:italic}
-  .qrs{display:flex;gap:24px;justify-content:center;margin-top:16px}
-  .qrs figure{margin:0}.qrs img{width:150px;height:150px;background:#fff;border-radius:8px}
+  .qrs{display:flex;flex-wrap:wrap;gap:clamp(10px,2.5vw,24px);justify-content:center;margin-top:16px}
+  .qrs figure{flex:0 1 150px;min-width:0;margin:0}
+  .qrs img{width:min(36vw,150px);height:auto;aspect-ratio:1;background:#fff;border-radius:8px}
+  #empty .qrs,#qrModal .qrs,#attract .qrs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+  #empty .qrs figure,#qrModal .qrs figure{flex:initial}
+  #empty .qrs img,#qrModal .qrs img,#attract .qrs img{width:min(42vw,240px);max-width:100%;height:auto;aspect-ratio:1}
+  #qrModal .card,#attract .card{width:min(820px,calc(100vw - 24px))}
+  #attract{position:fixed;inset:0;padding:12px;background:rgba(0,0,0,.92);display:none;
+    align-items:center;justify-content:center;z-index:25}
+  #attract.open{display:flex}
+  #attract h1{animation:attractPulse 1.8s ease-in-out infinite}
+  @keyframes attractPulse{50%{transform:scale(1.06);text-shadow:0 0 24px #f4b942}}
+  #reactionLayer{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:18}
+  .reactionFloat{position:absolute;bottom:-60px;font-size:clamp(36px,8vw,88px);
+    animation:reactionRise 4s ease-out forwards}
+  @keyframes reactionRise{to{transform:translateY(-110vh) rotate(25deg);opacity:0}}
+  #dot{position:fixed;top:12px;left:12px;width:10px;height:10px;border-radius:50%;
+    background:crimson;z-index:16;box-shadow:0 0 6px rgba(0,0,0,.7)}
+  #dot.connected{background:#2ecc71}
   #toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#1B4332;color:#fff;
     padding:12px 22px;border-radius:999px;opacity:0;transition:opacity .3s;z-index:20}
   #toast.show{opacity:1}
-  #qrBtn{position:fixed;right:16px;bottom:16px;z-index:15;background:#1B4332;color:#fff;border:1px solid #FAF6F0;
-    border-radius:999px;padding:10px 16px;cursor:pointer}
-  #qrModal{position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;z-index:30}
+  .cornerBtn{position:fixed;bottom:12px;z-index:15;max-width:calc(50vw - 18px);min-height:44px;
+    display:flex;align-items:center;justify-content:center;white-space:nowrap;color:#fff;
+    border:1px solid #FAF6F0;border-radius:999px;padding:8px 12px;
+    font-size:clamp(12px,3.3vw,16px);cursor:pointer}
+  #qrBtn{right:12px;background:#1B4332}
+  #boothBtn{left:12px;background:#8B0000}
+  #qrModal{position:fixed;inset:0;padding:12px;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;z-index:30}
   #qrModal.open{display:flex}
+  @media(max-width:520px){
+    #empty .qrs,#qrModal .qrs,#attract .qrs{grid-template-columns:minmax(0,1fr)}
+  }
+  @media (orientation:portrait){
+    .swiper-slide img{width:98vw;height:96vh}
+    .cornerBtn{bottom:96px;min-height:48px}
+  }
 </style>
 </head>
 <body class="idle">
+<div id="dot" aria-label="Connection status"></div>
+<div id="reactionLayer" aria-hidden="true"></div>
 <div class="swiper" id="swiperEl">
   <div class="swiper-wrapper" id="wrapper"></div>
   <div class="swiper-button-prev nav"></div>
@@ -42,12 +74,27 @@
     <div class="qrs" id="emptyQrs">
       <figure><img id="qrUploadEmpty" src="/qr/upload-qr.png" alt="Upload QR" onerror="this.style.display='none'"><figcaption>Share photos</figcaption></figure>
       <figure><img id="qrBoothEmpty" src="/qr/booth-qr.png" alt="Photo booth QR" onerror="this.style.display='none'"><figcaption>Photo booth</figcaption></figure>
+      <figure><img id="qrReactEmpty" src="/qr/react-qr.png" alt="Reactions QR" onerror="this.style.display='none'"><figcaption>Send a cheer</figcaption></figure>
     </div>
   </div>
 </div>
 
 <div id="toast">New Photo Added!</div>
-<button id="qrBtn" type="button">Show QR codes</button>
+<button id="boothBtn" class="cornerBtn" type="button">📸 Photo Booth</button>
+<button id="qrBtn" class="cornerBtn" type="button">Show QR codes</button>
+
+<div id="attract" role="dialog" aria-label="Welcome">
+  <div class="card">
+    <h1 id="attractTitle">Welcome!</h1>
+    <p>Share a photo, make a photo strip, or send a little cheer.</p>
+    <div class="qrs" id="attractQrs">
+      <figure><img src="/qr/upload-qr.png" alt="Upload QR"><figcaption>Share photos</figcaption></figure>
+      <figure><img src="/qr/booth-qr.png" alt="Photo booth QR"><figcaption>Photo booth</figcaption></figure>
+      <figure><img src="/qr/react-qr.png" alt="Reactions QR"><figcaption>Send a cheer</figcaption></figure>
+    </div>
+    <p>Touch anywhere to return to the slideshow</p>
+  </div>
+</div>
 
 <div id="qrModal" role="dialog" aria-label="QR codes">
   <div class="card">
@@ -55,27 +102,62 @@
     <div class="qrs">
       <figure><img src="/qr/upload-qr.png" alt="Upload QR" onerror="this.style.display='none'"><figcaption>Share photos</figcaption></figure>
       <figure><img src="/qr/booth-qr.png" alt="Photo booth QR" onerror="this.style.display='none'"><figcaption>Photo booth</figcaption></figure>
+      <figure><img src="/qr/react-qr.png" alt="Reactions QR" onerror="this.style.display='none'"><figcaption>Send a cheer</figcaption></figure>
     </div>
     <p>Tap anywhere to close</p>
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+<script src="/vendor/swiper-bundle.min.js"></script>
 <script src="/socket.io/socket.io.js"></script>
 <script>
-let config = { slideIntervalMs: 5000, idleResumeMs: 30000, publicUrl: '' };
+history.replaceState(null, '', location.href);
+window.addEventListener('popstate', () => history.pushState(null, '', location.href));
+
+let config = {
+  eventTitle: 'the Hofers Christmas 2026',
+  slideIntervalMs: 5000,
+  idleResumeMs: 30000,
+  attractIdleMs: 90000,
+  maxLiveSlides: 40,
+  publicUrl: '',
+};
 let swiper = null;
+let photoCount = 0;
 let userPaused = false;
 let idleTimer = null;
+let attractTimer = null;
+const knownPhotos = new Set();
+const wrapper = document.getElementById('wrapper');
+const maxLiveSlides = () => Math.max(1, Math.min(40, Number(config.maxLiveSlides) || 40));
 
 function slideEl(photo) {
   const d = document.createElement('div');
   d.className = 'swiper-slide';
   const img = document.createElement('img');
   img.src = photo.url; img.alt = photo.name || 'Event photo';
-  img.style.maxHeight = '96vh'; img.style.maxWidth = '96vw'; img.style.objectFit = 'contain';
+  img.loading = 'lazy'; img.decoding = 'async';
+  img.style.width = '98vw'; img.style.height = '96vh'; img.style.objectFit = 'contain';
   d.appendChild(img);
   return d;
+}
+function buildSwiper() {
+  if (swiper || !wrapper.children.length) return;
+  swiper = new Swiper('#swiperEl', {
+    loop: false,
+    navigation: { nextEl: '.swiper-button-next', prevEl: '.swiper-button-prev' },
+    autoplay: { delay: config.slideIntervalMs, disableOnInteraction: false },
+  });
+  updatePhotoNavigation();
+}
+function updatePhotoNavigation() {
+  photoCount = wrapper.children.length;
+  const enabled = photoCount > 1;
+  document.querySelectorAll('.nav').forEach((button) => { button.hidden = !enabled; });
+  if (swiper && swiper.navigation) {
+    if (enabled) swiper.navigation.enable();
+    else swiper.navigation.disable();
+  }
 }
 function showToast() {
   const t = document.getElementById('toast');
@@ -85,7 +167,54 @@ function showToast() {
 function applyQrVisibility() {
   // Only render QR images once we have a live public URL.
   const show = !!config.publicUrl;
-  document.getElementById('emptyQrs').style.display = show ? 'flex' : 'none';
+  document.getElementById('emptyQrs').style.display = show ? '' : 'none';
+}
+function addPhoto(photo) {
+  if (!photo || !photo.url || knownPhotos.has(photo.url)) return false;
+  knownPhotos.add(photo.url);
+  document.getElementById('empty').hidden = true;
+  if (!swiper) {
+    wrapper.appendChild(slideEl(photo));
+    buildSwiper();
+  } else {
+    swiper.prependSlide(slideEl(photo));
+    if (swiper.slides.length > maxLiveSlides()) swiper.removeSlide(swiper.slides.length - 1);
+    swiper.slideTo(0, 0);
+  }
+  updatePhotoNavigation();
+  return true;
+}
+async function resyncPhotos() {
+  try {
+    const response = await fetch('/api/photos', { cache: 'no-store' });
+    if (!response.ok) return;
+    const photos = await response.json();
+    const missing = photos.filter((photo) => photo && photo.url && !knownPhotos.has(photo.url));
+    missing.reverse().forEach(addPhoto);
+  } catch {}
+}
+function refreshQrCodes() {
+  const stamp = Date.now();
+  document.querySelectorAll('.qrs img').forEach((img) => {
+    const url = new URL(img.getAttribute('src'), location.href);
+    url.searchParams.set('t', stamp);
+    img.src = url.pathname + url.search;
+  });
+}
+function resetAttractTimer() {
+  clearTimeout(attractTimer);
+  document.getElementById('attract').classList.remove('open');
+  attractTimer = setTimeout(() => {
+    document.getElementById('attract').classList.add('open');
+  }, Math.max(1000, Number(config.attractIdleMs) || 90000));
+}
+function floatReaction(emoji) {
+  const item = document.createElement('span');
+  item.className = 'reactionFloat';
+  item.textContent = emoji;
+  item.style.left = `${5 + Math.random() * 85}%`;
+  document.getElementById('reactionLayer').appendChild(item);
+  setTimeout(() => item.remove(), 4100);
 }
 function pauseAndScheduleResume() {
   userPaused = true;
@@ -104,36 +233,48 @@ function pauseAndScheduleResume() {
 async function init() {
   try { config = { ...config, ...(await (await fetch('/api/config')).json()) }; } catch {}
   applyQrVisibility();
+  document.getElementById('attractTitle').textContent = config.eventTitle;
+  document.getElementById('attractQrs').style.display = config.publicUrl ? '' : 'none';
   let photos = [];
-  try { photos = await (await fetch('/api/photos')).json(); } catch {}
-  const wrapper = document.getElementById('wrapper');
-  photos.forEach(p => wrapper.appendChild(slideEl(p)));
-  document.getElementById('empty').hidden = photos.length > 0;
-
-  swiper = new Swiper('#swiperEl', {
-    loop: false,
-    navigation: { nextEl: '.swiper-button-next', prevEl: '.swiper-button-prev' },
-    autoplay: { delay: config.slideIntervalMs, disableOnInteraction: false },
-  });
+  try { photos = await (await fetch('/api/photos', { cache: 'no-store' })).json(); } catch {}
+  photos.forEach((photo) => { if (photo && photo.url) knownPhotos.add(photo.url); });
+  photos.slice(0, maxLiveSlides()).forEach((photo) => wrapper.appendChild(slideEl(photo)));
+  document.getElementById('empty').hidden = wrapper.children.length > 0;
+  buildSwiper();
+  updatePhotoNavigation();
 
   for (const ev of ['touchstart', 'pointerdown']) {
-    document.addEventListener(ev, pauseAndScheduleResume, { passive: true });
+    document.addEventListener(ev, () => {
+      pauseAndScheduleResume();
+      resetAttractTimer();
+    }, { passive: true });
   }
-  document.getElementById('qrBtn').addEventListener('click', () =>
-    document.getElementById('qrModal').classList.add('open'));
+  document.addEventListener('keydown', resetAttractTimer);
+  document.getElementById('qrBtn').addEventListener('click', () => {
+    refreshQrCodes();
+    document.getElementById('qrModal').classList.add('open');
+  });
+  document.getElementById('boothBtn').addEventListener('click', () =>
+    window.location.assign('/booth.html?kiosk=1'));
   document.getElementById('qrModal').addEventListener('click', () =>
     document.getElementById('qrModal').classList.remove('open'));
 
   const socket = io();
   socket.on('new-photo', (photo) => {
-    document.getElementById('empty').hidden = true;
-    if (swiper) {
-      swiper.prependSlide(slideEl(photo));
-      swiper.slideTo(0);
-      if (userPaused === false && swiper.autoplay) swiper.autoplay.start();
-    }
-    showToast();
+    if (addPhoto(photo)) showToast();
   });
+  const dot = document.getElementById('dot');
+  socket.on('connect', () => {
+    dot.classList.add('connected');
+    resyncPhotos();
+  });
+  socket.on('disconnect', () => {
+    dot.classList.remove('connected');
+  });
+  socket.on('reaction', (event) => {
+    if (event && typeof event.emoji === 'string') floatReaction(event.emoji);
+  });
+  resetAttractTimer();
 }
 init();
 </script>

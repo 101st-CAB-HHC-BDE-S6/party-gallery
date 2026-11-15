@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 260">
+  <path d="M180 11 220 35l47-1 20 42 43 20-2 48 22 38-28 39-8 47-47 8-38 27-41-23-47 2-23-42-42-20 2-48-22-38 28-39 8-47 47-8Z" fill="#8b0000" stroke="#1b4332" stroke-width="12" stroke-linejoin="round"/>
+  <circle cx="180" cy="132" r="91" fill="#faf6f0" stroke="#f4b942" stroke-width="9"/>
+  <text x="180" y="118" text-anchor="middle" fill="#8b0000" font-family="Georgia,serif" font-size="35" font-weight="bold">HO HO</text>
+  <text x="180" y="164" text-anchor="middle" fill="#1b4332" font-family="Georgia,serif" font-size="35" font-weight="bold">HO!</text>
+</svg>

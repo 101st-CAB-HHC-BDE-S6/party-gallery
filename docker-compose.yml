@@ -22,7 +22,7 @@ services:
 
   cloudflared:
     container_name: cloudflared
-    image: cloudflare/cloudflared:latest
+    image: cloudflare/cloudflared:2025.11.1
     restart: unless-stopped
     depends_on:
       gallery-app:

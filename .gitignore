@@ -4,3 +4,6 @@ uploads/*
 !uploads/.gitkeep
 qr/*
 !qr/.gitkeep
+qr/*.pid
+qr/*.log
+tmp/

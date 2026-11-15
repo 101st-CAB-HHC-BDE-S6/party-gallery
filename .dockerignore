@@ -1,6 +1,9 @@
 node_modules
 uploads
 qr
+qr/*.pid
+qr/*.log
+tmp
 assets
 .git
 .env
