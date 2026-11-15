@@ -165,7 +165,8 @@ if (current !== url) {
 NODE
 if ! git diff --quiet -- public/tunnel-config.json; then
   git add public/tunnel-config.json
-  git commit -m "Update active public tunnel endpoint"
+  git commit -m "Update active public tunnel endpoint" \
+    -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
   git push origin main
 fi
 
