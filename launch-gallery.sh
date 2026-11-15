@@ -5,10 +5,22 @@ PROJECT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_DIR"
 
 ADB_SERIAL="G8S1KU062024019K"
+KIOSK_ADMIN="com.local.commandcenter/.AdminReceiver"
+KIOSK_PACKAGE="com.local.commandcenter"
 LOCAL_IP="${LOCAL_IP:-$(ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1); exit}')}"
 LOCAL_IP="${LOCAL_IP:-192.168.1.139}"
 GALLERY_URL="http://${LOCAL_IP}:3000/gallery.html"
 HEALTH_URL="http://localhost:3000/api/health"
+OWNER_REMOVED=0
+
+restore_device_owner() {
+  if [ "$OWNER_REMOVED" -eq 1 ]; then
+    adb -s "$ADB_SERIAL" shell dpm set-device-owner --user current \
+      --name HoferHouse "$KIOSK_ADMIN"
+    OWNER_REMOVED=0
+  fi
+}
+trap restore_device_owner EXIT
 
 mkdir -p qr
 
@@ -68,21 +80,52 @@ if ! adb -s "$ADB_SERIAL" get-state 2>/dev/null | grep -qx device; then
   exit 1
 fi
 
-PACKAGE_INFO="$(adb -s "$ADB_SERIAL" shell dumpsys package com.local.commandcenter)"
-if ! grep -q 'versionCode=2' <<< "$PACKAGE_INFO"; then
-  echo "Command Center needs the URL-intent update (versionCode 2) before the gallery can be shown." >&2
-  exit 1
+DEVICE_POLICY="$(adb -s "$ADB_SERIAL" shell dumpsys device_policy)"
+LOCK_STATE="$(adb -s "$ADB_SERIAL" shell dumpsys activity activities \
+  | sed -n 's/.*mLockTaskModeState=\([^ ]*\).*/\1/p' | head -1 | tr -d '\r')"
+
+if [ "$LOCK_STATE" != "NONE" ]; then
+  if ! grep -Fq "package=${KIOSK_PACKAGE}" <<< "$DEVICE_POLICY"; then
+    echo "LockTask is active but Command Center is not the device owner; refusing to alter kiosk policy." >&2
+    exit 1
+  fi
+  adb -s "$ADB_SERIAL" shell dpm remove-active-admin --user current "$KIOSK_ADMIN"
+  OWNER_REMOVED=1
+  for _ in $(seq 1 10); do
+    LOCK_STATE="$(adb -s "$ADB_SERIAL" shell dumpsys activity activities \
+      | sed -n 's/.*mLockTaskModeState=\([^ ]*\).*/\1/p' | head -1 | tr -d '\r')"
+    [ "$LOCK_STATE" = "NONE" ] && break
+    sleep 1
+  done
+  if [ "$LOCK_STATE" != "NONE" ]; then
+    echo "Could not release Command Center LockTask mode." >&2
+    exit 1
+  fi
 fi
 
 adb -s "$ADB_SERIAL" shell input keyevent KEYCODE_WAKEUP
 adb -s "$ADB_SERIAL" shell wm dismiss-keyguard
 START_OUTPUT="$(adb -s "$ADB_SERIAL" shell am start \
-  -n com.local.commandcenter/.MainActivity \
+  -n org.lineageos.jelly/.MainActivity \
   -a android.intent.action.VIEW -d "$GALLERY_URL" 2>&1)"
 printf '%s\n' "$START_OUTPUT"
 if grep -q '^Error:' <<< "$START_OUTPUT"; then
   exit 1
 fi
+
+RESUMED_ACTIVITY=""
+for _ in $(seq 1 15); do
+  RESUMED_ACTIVITY="$(adb -s "$ADB_SERIAL" shell dumpsys activity activities \
+    | grep 'mResumedActivity' | head -1 || true)"
+  [[ "$RESUMED_ACTIVITY" == *org.lineageos.jelly* ]] && break
+  sleep 1
+done
+if [[ "$RESUMED_ACTIVITY" != *org.lineageos.jelly* ]]; then
+  echo "The Lineage Jelly browser did not become the foreground activity." >&2
+  exit 1
+fi
+
+restore_device_owner
 
 cat <<EOF
 
@@ -91,5 +134,6 @@ Local Gallery URL:        ${GALLERY_URL}
 Printable QR Sheet URL:   http://${LOCAL_IP}:3000/print-qrs.html
 Public Upload URL:        ${TUNNEL_URL}/upload.html
 Public Photo Booth URL:   ${TUNNEL_URL}/booth.html
+Browser:                  org.lineageos.jelly/.MainActivity
 =======================================================
 EOF
