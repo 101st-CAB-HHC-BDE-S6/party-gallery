@@ -46,7 +46,6 @@
     border:1px solid #FAF6F0;border-radius:999px;padding:8px 12px;
     font-size:clamp(12px,3.3vw,16px);cursor:pointer}
   #qrBtn{right:12px;background:#1B4332}
-  #boothBtn{left:12px;background:#8B0000}
   #qrModal{position:fixed;inset:0;padding:12px;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;z-index:30}
   #qrModal.open{display:flex}
   @media(max-width:520px){
@@ -80,7 +79,6 @@
 </div>
 
 <div id="toast">New Photo Added!</div>
-<button id="boothBtn" class="cornerBtn" type="button">📸 Photo Booth</button>
 <button id="qrBtn" class="cornerBtn" type="button">Show QR codes</button>
 
 <div id="attract" role="dialog" aria-label="Welcome">
@@ -254,8 +252,6 @@ async function init() {
     refreshQrCodes();
     document.getElementById('qrModal').classList.add('open');
   });
-  document.getElementById('boothBtn').addEventListener('click', () =>
-    window.location.assign('/booth.html?kiosk=1'));
   document.getElementById('qrModal').addEventListener('click', () =>
     document.getElementById('qrModal').classList.remove('open'));
 
