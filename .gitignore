@@ -2,6 +2,7 @@
 node_modules/
 uploads/*
 !uploads/.gitkeep
+uploads/.originals/
 qr/*
 !qr/.gitkeep
 qr/*.pid

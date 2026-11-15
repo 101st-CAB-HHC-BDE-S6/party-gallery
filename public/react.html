@@ -27,13 +27,13 @@
   <p>Tap an emoji to send it floating across the big screen.</p>
   <div class="choices" id="choices" aria-label="Choose a reaction"></div>
   <p id="status" role="status" aria-live="polite"></p>
-  <a href="/gallery.html">Back to the album</a>
+  <a href="gallery.html">Back to the album</a>
 </main>
-<script src="/socket.io/socket.io.js"></script>
+<script src="backend.js"></script>
 <script>
 const emojis = ['❤️', '😂', '🎄', '🎅', '✨', '🥳', '👏', '🎉', '😍', '🤶'];
 const statusEl = document.getElementById('status');
-fetch('/api/config', { cache: 'no-store' })
+partyGalleryApi('/api/config').then((url) => fetch(url, { cache: 'no-store' }))
   .then((response) => response.ok ? response.json() : Promise.reject(new Error('Configuration unavailable')))
   .then((config) => { document.getElementById('title').textContent = config.eventTitle || 'Send a little cheer!'; })
   .catch(() => { statusEl.textContent = 'Could not load event details; reactions are still available.'; });
@@ -47,7 +47,7 @@ emojis.forEach((emoji) => {
     button.disabled = true;
     statusEl.textContent = 'Sending…';
     try {
-      const response = await fetch('/api/react', {
+      const response = await fetch(await partyGalleryApi('/api/react'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ emoji }),

@@ -9,9 +9,9 @@
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:#0a0a0a;color:#fff;font-family:Georgia,serif;overflow:hidden}
   body.idle{cursor:none}
-  .swiper{width:100vw;height:100vh}
+  .swiper{width:100vw;height:100vh;height:100dvh}
   .swiper-slide{display:flex;align-items:center;justify-content:center;background:#0a0a0a}
-  .swiper-slide img{width:98vw;height:96vh;object-fit:contain}
+  .swiper-slide img{width:100vw;height:100vh;height:100dvh;object-fit:contain}
   .nav{opacity:0;transition:opacity .3s;color:#fff}
   body.paused .nav{opacity:1}
   #empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:5}
@@ -51,10 +51,7 @@
   @media(max-width:520px){
     #empty .qrs,#qrModal .qrs,#attract .qrs{grid-template-columns:minmax(0,1fr)}
   }
-  @media (orientation:portrait){
-    .swiper-slide img{width:98vw;height:96vh}
-    .cornerBtn{bottom:96px;min-height:48px}
-  }
+  @media (orientation:portrait){.cornerBtn{bottom:16px;min-height:48px}}
 </style>
 </head>
 <body class="idle">
@@ -135,7 +132,7 @@ function slideEl(photo) {
   const img = document.createElement('img');
   img.src = photo.url; img.alt = photo.name || 'Event photo';
   img.loading = 'lazy'; img.decoding = 'async';
-  img.style.width = '98vw'; img.style.height = '96vh'; img.style.objectFit = 'contain';
+  img.style.width = '100vw'; img.style.height = '100vh'; img.style.height = '100dvh'; img.style.objectFit = 'contain';
   d.appendChild(img);
   return d;
 }

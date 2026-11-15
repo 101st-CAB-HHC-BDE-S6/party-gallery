@@ -43,7 +43,7 @@
 </div>
 <script>
 fetch('/api/config').then(r => r.json()).then(cfg => {
-  const base = cfg.publicUrl || location.origin;
+  const base = cfg.qrBaseUrl || cfg.publicUrl || location.origin;
   document.getElementById('uploadUrl').textContent = base + '/upload.html';
   document.getElementById('boothUrl').textContent = base + '/booth.html';
   document.getElementById('reactUrl').textContent = base + '/react.html';

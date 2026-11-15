@@ -20,6 +20,7 @@ const ASSETS = path.join(ROOT, 'assets');
 const QR_DIR = path.join(ROOT, 'qr');
 const CONFIG_PATH = path.join(ROOT, 'config.json');
 const FRAME = path.join(ASSETS, 'theme-frame.png');
+const PAGES_BASE_URL = 'https://101st-cab-hhc-bde-s6.github.io/party-gallery';
 
 const DEFAULTS = {
   eventTitle: 'the Hofers Christmas 2026',
@@ -52,14 +53,31 @@ for (const d of [UPLOADS, TMP, ASSETS, QR_DIR]) fs.mkdirSync(d, { recursive: tru
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { maxHttpBufferSize: 20 * 1024 * 1024, pingTimeout: 20000 });
+function isAllowedOrigin(origin) {
+  if (!origin) return true;
+  return /^https:\/\/[a-z0-9-]+\.github\.io$/i.test(origin)
+    || /^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/i.test(origin)
+    || /^http:\/\/(?:localhost|127\.0\.0\.1|192\.168\.1\.139):3000$/i.test(origin);
+}
+const corsOptions = {
+  origin: (origin, callback) => callback(null, isAllowedOrigin(origin)),
+  methods: ['GET', 'HEAD', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Retry-After'],
+  maxAge: 86400,
+};
+const io = new Server(server, {
+  cors: corsOptions,
+  maxHttpBufferSize: 20 * 1024 * 1024,
+  pingTimeout: 20000,
+});
 
 app.set('trust proxy', true);
+app.use(cors(corsOptions));
 app.use('/api', (req, res, next) => {
   res.set('Cache-Control', 'no-store');
   next();
 });
-app.use(cors());
 app.use(express.json({ limit: '60mb' }));
 
 /* ---------- Proxy-aware in-memory rate limiter ---------- */
@@ -111,9 +129,15 @@ app.get('/api/health', (req, res) => {
 app.get('/api/config', (req, res) => {
   const { eventTitle, filters, idleResumeMs, attractIdleMs, layouts, maxCaptionLen, slideIntervalMs, maxLiveSlides } = loadConfig();
   let activeUrl = '';
+  let qrBaseUrl = '';
   try { activeUrl = fs.readFileSync(path.join(QR_DIR, 'active-url.txt'), 'utf8').trim(); } catch {}
+  try { qrBaseUrl = fs.readFileSync(path.join(QR_DIR, 'qr-base-url.txt'), 'utf8').trim(); } catch {}
   const publicUrl = /^https?:\/\/[^\s]+$/.test(activeUrl) ? activeUrl : '';
-  res.json({ eventTitle, filters, idleResumeMs, attractIdleMs, layouts, maxCaptionLen, slideIntervalMs, maxLiveSlides, publicUrl });
+  if (!/^https:\/\/[a-z0-9.-]+\/[a-z0-9-]+$/i.test(qrBaseUrl)) qrBaseUrl = publicUrl;
+  res.json({
+    eventTitle, filters, idleResumeMs, attractIdleMs, layouts, maxCaptionLen,
+    slideIntervalMs, maxLiveSlides, publicUrl, qrBaseUrl, pagesBaseUrl: PAGES_BASE_URL,
+  });
 });
 
 app.get('/api/photos', async (req, res) => {
@@ -186,7 +210,7 @@ app.post('/api/upload-general', rateLimit, (req, res) => {
         const filename = `candid-${Date.now()}-${crypto.randomBytes(3).toString('hex')}.jpg`;
         const info = await sharp(f.path, { limitInputPixels: 40000000, failOn: 'none' })
           .rotate()
-          .resize({ width: 1920, height: 1920, fit: 'inside', withoutEnlargement: true })
+          .resize(1200, 1920, { fit: 'cover', position: sharp.strategy.attention })
           .toColourspace('srgb')
           .jpeg({ quality: 88 })
           .toFile(path.join(UPLOADS, filename));
@@ -206,24 +230,24 @@ app.post('/api/upload-general', rateLimit, (req, res) => {
 
 /* ---------- Upload: photo booth composites ---------- */
 const CELLS = {
-  '1': [{ left: 100, top: 240, width: 1000, height: 1180 }],
+  '1': [{ left: 70, top: 250, width: 1060, height: 1420 }],
   '2': [
-    { left: 100, top: 240, width: 1000, height: 582 },
-    { left: 100, top: 838, width: 1000, height: 582 },
+    { left: 70, top: 250, width: 1060, height: 700 },
+    { left: 70, top: 970, width: 1060, height: 700 },
   ],
   '4': [
-    { left: 100, top: 240, width: 492, height: 582 },
-    { left: 608, top: 240, width: 492, height: 582 },
-    { left: 100, top: 838, width: 492, height: 582 },
-    { left: 608, top: 838, width: 492, height: 582 },
+    { left: 70, top: 250, width: 520, height: 700 },
+    { left: 610, top: 250, width: 520, height: 700 },
+    { left: 70, top: 970, width: 520, height: 700 },
+    { left: 610, top: 970, width: 520, height: 700 },
   ],
   '6': [
-    { left: 100, top: 240, width: 492, height: 383 },
-    { left: 608, top: 240, width: 492, height: 383 },
-    { left: 100, top: 639, width: 492, height: 383 },
-    { left: 608, top: 639, width: 492, height: 383 },
-    { left: 100, top: 1038, width: 492, height: 382 },
-    { left: 608, top: 1038, width: 492, height: 382 },
+    { left: 70, top: 250, width: 520, height: 460 },
+    { left: 610, top: 250, width: 520, height: 460 },
+    { left: 70, top: 730, width: 520, height: 460 },
+    { left: 610, top: 730, width: 520, height: 460 },
+    { left: 70, top: 1210, width: 520, height: 460 },
+    { left: 610, top: 1210, width: 520, height: 460 },
   ],
 };
 
@@ -277,15 +301,12 @@ app.post('/api/upload-booth', rateLimit, async (req, res) => {
 
     const baseWithCells = await sharp({
       create: {
-        width: 1200, height: 1600, channels: 4,
+        width: 1200, height: 1920, channels: 4,
         background: { r: 250, g: 246, b: 240, alpha: 1 }, // #FAF6F0
       },
     }).composite(composites).png().toBuffer();
 
-    if (!fs.existsSync(FRAME)) {
-      const { ensureFrame } = require('./generate-frame');
-      await ensureFrame();
-    }
+    await ensureFrame();
 
     const overlays = [{ input: FRAME, left: 0, top: 0 }];
     if (caption) {
@@ -296,7 +317,7 @@ app.post('/api/upload-booth', rateLimit, async (req, res) => {
         `font-family="Liberation Serif, DejaVu Serif, serif" font-size="34" ` +
         `font-weight="bold" font-style="italic" fill="#1B4332">${caption}</text></svg>`
       );
-      overlays.push({ input: captionSvg, left: 0, top: 1490 });
+      overlays.push({ input: captionSvg, left: 0, top: 1790 });
     }
 
     const filename = `booth-${Date.now()}-${crypto.randomBytes(3).toString('hex')}.jpg`;
@@ -306,7 +327,7 @@ app.post('/api/upload-booth', rateLimit, async (req, res) => {
       .toFile(path.join(UPLOADS, filename));
 
     const url = `/uploads/${filename}`;
-    io.emit('new-photo', { url, name: filename, w: 1200, h: 1600, type: 'booth' });
+    io.emit('new-photo', { url, name: filename, w: 1200, h: 1920, type: 'booth' });
     return res.json({ ok: true, url });
   } catch (e) {
     console.error('upload-booth failed:', e);
@@ -343,10 +364,7 @@ function pruneRetention() {
 
 /* ---------- Boot ---------- */
 (async () => {
-  if (!fs.existsSync(FRAME)) {
-    await ensureFrame();
-    console.log('Generated fallback theme frame.');
-  }
+  await ensureFrame();
   for (const name of await fsp.readdir(TMP)) {
     await fsp.unlink(path.join(TMP, name)).catch((error) => {
       console.error(`temporary upload cleanup failed for ${name}:`, error);

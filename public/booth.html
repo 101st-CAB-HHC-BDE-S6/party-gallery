@@ -5,98 +5,86 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>the Hofers Christmas 2026 — Photo Booth</title>
 <style>
-  body{margin:0;font-family:Georgia,serif;background:#FAF6F0;color:#1B4332;text-align:center;padding:20px}
-  h1{font-style:italic}
-  .stage{position:relative;width:min(92vw,640px);max-width:100%;box-sizing:border-box;margin:0 auto;aspect-ratio:492 / 582;
-    border:4px solid #1B4332;border-radius:16px;overflow:hidden;background:#000}
-  .stage video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
-    transform:scaleX(-1);border:0}
-  #stickerLayer{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+  *{box-sizing:border-box}
+  body{margin:0;padding:20px;background:#FAF6F0;color:#1B4332;text-align:center;font-family:Georgia,serif}
+  h1{font-style:italic;font-size:clamp(22px,6vw,32px);margin-top:0}
+  .card{max-width:560px;margin:12px auto;padding:clamp(18px,5vw,28px);background:#fff;
+    border:2px solid #8B0000;border-radius:18px;box-shadow:0 8px 26px #1b43321a}
+  .card p{line-height:1.5}
   .pills{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:12px 0}
   .pill{border:2px solid #1B4332;background:#fff;color:#1B4332;border-radius:999px;padding:8px 18px;cursor:pointer}
   .pill.active{background:#1B4332;color:#fff}
-  button.main{background:#8B0000;color:#fff;border:0;border-radius:999px;padding:14px 28px;font-size:19px;cursor:pointer;margin:14px}
+  button.main{background:#8B0000;color:#fff;border:0;border-radius:999px;padding:14px 24px;
+    font:inherit;font-size:18px;cursor:pointer;margin:12px}
   button:disabled{opacity:.5;cursor:not-allowed}
+  .stage{position:relative;width:min(92vw,640px);max-width:100%;margin:12px auto;aspect-ratio:520 / 700;
+    border:4px solid #1B4332;border-radius:16px;overflow:hidden;background:#000}
+  .stage video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);border:0}
   #caption{width:min(92vw,520px);padding:12px 14px;border:2px solid #1B4332;border-radius:12px;
     font:16px Georgia,serif;color:#1B4332;background:#fff}
   #count{position:fixed;inset:0;display:none;align-items:center;justify-content:center;font-size:38vw;color:#fff;
     background:rgba(0,0,0,.45);z-index:10}
   #flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:11}
   #flash.on{opacity:1}
-  .card{background:#fff;border:2px solid #8B0000;border-radius:16px;padding:20px;max-width:520px;margin:16px auto}
-  #result img{max-width:min(92vw,420px);border:2px solid #1B4332}
+  #result img{width:min(92vw,420px);height:auto;border:2px solid #1B4332}
   #albumBack{position:fixed;top:12px;left:12px;z-index:20;background:#1B4332;color:#fff;
     border:1px solid #FAF6F0;border-radius:999px;padding:10px 16px;text-decoration:none}
   [hidden]{display:none!important}
 </style>
 </head>
 <body>
-<a id="albumBack" href="/gallery.html" hidden>← Back to Album</a>
-<h1>the Hofers Christmas 2026 — Photo Booth</h1>
+<a id="albumBack" href="gallery.html" hidden>Back to Album</a>
 
-<div id="trouble" class="card" hidden>
-  <h2>Camera unavailable</h2>
-  <p>The photo booth needs camera access, which browsers only allow on a secure
-     (HTTPS) page or your home network address. If you opened this over plain HTTP
-     from outside the house, try the link on the QR code again, allow camera
-     permission when asked, or just use the Share Photos page instead.</p>
-  <button class="main" id="retry" type="button">Retry Camera</button>
-</div>
+<section id="welcome" class="card">
+  <h1>the Hofers Christmas 2026 Photo Booth</h1>
+  <p>Your camera stays off until you choose to open it. Tap below, then choose Allow when your browser asks.</p>
+  <button class="main" id="openCamera" type="button">Tap to Open Camera (Then Tap 'Allow')</button>
+  <p id="cameraError" role="status" hidden></p>
+</section>
 
-<p>Layout</p>
-<div class="pills" id="layouts"></div>
-<p>Filter</p>
-<div class="pills" id="filters"></div>
-<p>Festive props — tap to add, drag to move, double-tap to resize and rotate</p>
-<div class="pills" id="stickers"></div>
+<main id="cameraTools" hidden>
+  <p>Layout</p>
+  <div class="pills" id="layouts"></div>
+  <p>Filter</p>
+  <div class="pills" id="filters"></div>
+  <div class="stage" id="stage">
+    <video id="cam" autoplay playsinline muted></video>
+  </div>
+  <p><input type="text" id="caption" maxlength="40" placeholder="Optional caption (e.g. Merry Christmas from the Hofers!)"></p>
+  <div id="count"></div>
+  <div id="flash"></div>
+  <button class="main" id="start" type="button" disabled>Start Photo Booth</button>
+  <div id="result" hidden>
+    <img id="finalImg" alt="Your framed photo booth picture">
+    <p><strong>Hold Image to Save to Phone</strong></p>
+    <button class="main" id="again" type="button">Take Another</button>
+  </div>
+</main>
+<p id="status" role="status" aria-live="polite"></p>
 
-<div class="stage" id="stage">
-  <video id="cam" autoplay playsinline muted></video>
-  <canvas id="stickerLayer" aria-label="Drag stickers on your photo"></canvas>
-</div>
-<p><input type="text" id="caption" maxlength="40" placeholder="Optional caption (e.g. Merry Christmas from the Hofers!)"></p>
-<div id="count"></div>
-<div id="flash"></div>
-<br>
-<button class="main" id="start" type="button" disabled>Start Photo Booth</button>
-<p id="status" role="status"></p>
-
-<div id="result" hidden>
-  <img id="finalImg" alt="Your framed photo booth picture">
-  <p><strong>Hold Image to Save to Phone</strong></p>
-  <button class="main" id="again" type="button">Take Another</button>
-</div>
-
+<script src="backend.js"></script>
 <script>
 const kioskMode = new URLSearchParams(location.search).get('kiosk') === '1';
-const albumUrl = '/gallery.html';
+const albumUrl = 'gallery.html';
 let idleTimer = null;
 let returnTimer = null;
 const CELLS = {
-  '1': { width: 1000, height: 1180 },
-  '2': { width: 1000, height: 582 },
-  '4': { width: 492, height: 582 },
-  '6': { width: 492, height: 383 },
+  '1': { width: 1060, height: 1420 },
+  '2': { width: 1060, height: 700 },
+  '4': { width: 520, height: 700 },
+  '6': { width: 520, height: 460 },
 };
-let layout = '4', filter = 'color', stream = null;
+let layout = '4';
+let filter = 'color';
+let stream = null;
+let capturing = false;
 const video = document.getElementById('cam');
 const stage = document.getElementById('stage');
 const statusEl = document.getElementById('status');
 const startButton = document.getElementById('start');
-const stickerLayer = document.getElementById('stickerLayer');
-const stickerCtx = stickerLayer.getContext('2d');
-const stickerDefinitions = [
-  ['santa', 'Santa Hat', '/stickers/santa-hat.svg'],
-  ['antlers', 'Antlers', '/stickers/reindeer-antlers.svg'],
-  ['elf', 'Elf Ears', '/stickers/elf-ears.svg'],
-  ['lights', 'Lights', '/stickers/christmas-lights.svg'],
-  ['mustache', 'Mustache', '/stickers/mustache.svg'],
-  ['hoho', 'Ho Ho Ho!', '/stickers/ho-ho-ho.svg'],
-];
-const stickerImages = new Map();
-const stickers = [];
-let draggedSticker = null;
-let capturing = false;
+const openCameraButton = document.getElementById('openCamera');
+const cameraTools = document.getElementById('cameraTools');
+const welcome = document.getElementById('welcome');
 
 function returnToAlbum() {
   location.replace(albumUrl);
@@ -112,158 +100,66 @@ function scheduleKioskReturn(delay) {
   clearTimeout(returnTimer);
   returnTimer = setTimeout(returnToAlbum, delay);
 }
-
-function pills(el, values, current, onPick) {
-  el.innerHTML = '';
-  values.forEach(([val, label]) => {
-    const b = document.createElement('button');
-    b.type = 'button'; b.className = 'pill' + (val === current ? ' active' : '');
-    b.textContent = label;
-    b.onclick = () => onPick(val);
-    el.appendChild(b);
+function pills(container, values, current, onPick) {
+  container.replaceChildren();
+  values.forEach(([value, label]) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'pill' + (value === current ? ' active' : '');
+    button.textContent = label;
+    button.addEventListener('click', () => onPick(value));
+    container.appendChild(button);
   });
-}
-function drawStickerLayer() {
-  if (!stickerLayer.width || !stickerLayer.height) return;
-  stickerCtx.clearRect(0, 0, stickerLayer.width, stickerLayer.height);
-  stickers.forEach((sticker) => {
-    const image = stickerImages.get(sticker.key);
-    if (!image || !image.complete || !image.naturalWidth) return;
-    const width = sticker.size * stickerLayer.width;
-    const height = width * image.naturalHeight / image.naturalWidth;
-    stickerCtx.save();
-    stickerCtx.translate(sticker.x * stickerLayer.width, sticker.y * stickerLayer.height);
-    stickerCtx.rotate(sticker.rot * Math.PI / 180);
-    stickerCtx.drawImage(image, -width / 2, -height / 2, width, height);
-    stickerCtx.restore();
-  });
-}
-function resizeStickerLayer() {
-  if (!video.videoWidth || !video.videoHeight) return;
-  const cell = CELLS[layout];
-  const width = video.videoWidth;
-  const height = Math.round(width * cell.height / cell.width);
-  if (stickerLayer.width !== width || stickerLayer.height !== height) {
-    stickerLayer.width = width;
-    stickerLayer.height = height;
-  }
-  drawStickerLayer();
 }
 function renderStageAspect() {
   const cell = CELLS[layout];
   stage.style.aspectRatio = `${cell.width} / ${cell.height}`;
-  resizeStickerLayer();
 }
-function setupStickerControls() {
-  const container = document.getElementById('stickers');
-  stickerDefinitions.forEach(([id, label, src]) => {
-    const image = new Image();
-    image.onload = drawStickerLayer;
-    image.src = src;
-    stickerImages.set(id, image);
-
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'pill';
-    button.textContent = label;
-    button.addEventListener('click', () => {
-      stickers.push({ key: id, x: 0.5, y: 0.36, size: 0.27, rot: 0 });
-      drawStickerLayer();
-      resetInactivityTimer();
-    });
-    container.appendChild(button);
-  });
-  const clear = document.createElement('button');
-  clear.type = 'button';
-  clear.className = 'pill';
-  clear.textContent = 'Clear Props';
-  clear.addEventListener('click', () => {
-    stickers.length = 0;
-    drawStickerLayer();
-    resetInactivityTimer();
-  });
-  container.appendChild(clear);
-}
-function pointerPoint(event) {
-  const rect = stickerLayer.getBoundingClientRect();
-  return {
-    x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
-    y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)),
-  };
-}
-function stickerAt(point) {
-  for (let i = stickers.length - 1; i >= 0; i--) {
-    const sticker = stickers[i];
-    const image = stickerImages.get(sticker.key);
-    if (!image || !image.naturalWidth) continue;
-    const width = sticker.size * stickerLayer.width;
-    const height = width * image.naturalHeight / image.naturalWidth;
-    const dx = (point.x - sticker.x) * stickerLayer.width;
-    const dy = (point.y - sticker.y) * stickerLayer.height;
-    const angle = -sticker.rot * Math.PI / 180;
-    const x = dx * Math.cos(angle) - dy * Math.sin(angle);
-    const y = dx * Math.sin(angle) + dy * Math.cos(angle);
-    if (Math.abs(x) <= width / 2 && Math.abs(y) <= height / 2) return sticker;
-  }
-  return null;
-}
-stickerLayer.addEventListener('pointerdown', (event) => {
-  draggedSticker = stickerAt(pointerPoint(event));
-  if (draggedSticker) {
-    stickerLayer.setPointerCapture(event.pointerId);
-    event.preventDefault();
-  }
-});
-stickerLayer.addEventListener('dblclick', (event) => {
-  const sticker = stickerAt(pointerPoint(event));
-  if (!sticker) return;
-  sticker.size = Math.max(0.12, Math.min(0.5, sticker.size + 0.05));
-  sticker.rot = (sticker.rot + 15) % 360;
-  drawStickerLayer();
-  resetInactivityTimer();
-  event.preventDefault();
-});
-stickerLayer.addEventListener('pointermove', (event) => {
-  if (!draggedSticker) return;
-  const point = pointerPoint(event);
-  draggedSticker.x = point.x;
-  draggedSticker.y = point.y;
-  drawStickerLayer();
-});
-function releaseSticker() {
-  draggedSticker = null;
-}
-stickerLayer.addEventListener('pointerup', releaseSticker);
-stickerLayer.addEventListener('pointercancel', releaseSticker);
-
 async function loadConfig() {
-  let cfg = { layouts: { '1': true, '2': true, '4': true, '6': true }, filters: { color: true, bw: true } };
-  try { cfg = await (await fetch('/api/config')).json(); } catch {}
-  const layouts = Object.keys(cfg.layouts || {}).filter(k => cfg.layouts[k]);
+  let cfg = {
+    layouts: { '1': true, '2': true, '4': true, '6': true },
+    filters: { color: true, bw: true },
+  };
+  try {
+    const response = await fetch(await partyGalleryApi('/api/config'), { cache: 'no-store' });
+    if (!response.ok) throw new Error('Event settings are unavailable.');
+    cfg = { ...cfg, ...await response.json() };
+  } catch {
+    statusEl.textContent = 'Could not load event settings. You can still open the camera.';
+  }
+  const layouts = Object.keys(cfg.layouts || {}).filter((key) => cfg.layouts[key] && CELLS[key]);
   if (!layouts.includes(layout)) layout = layouts[0] || '1';
-  pills(document.getElementById('layouts'), layouts.map(k => [k, k + (k === '1' ? ' photo' : ' photos')]), layout,
-    (v) => { layout = v; loadPillsOnly(cfg); });
-  loadPillsOnly(cfg);
-}
-function loadPillsOnly(cfg) {
   const filters = [];
-  if (!cfg || cfg.filters?.color) filters.push(['color', 'Color']);
-  if (!cfg || cfg.filters?.bw) filters.push(['bw', 'B&W']);
-  pills(document.getElementById('filters'), filters, filter, (v) => { filter = v; loadPillsOnly(cfg); });
-  document.querySelectorAll('#layouts .pill').forEach(p =>
-    p.classList.toggle('active', p.textContent.startsWith(layout + ' ')));
+  if (cfg.filters?.color) filters.push(['color', 'Color']);
+  if (cfg.filters?.bw) filters.push(['bw', 'B&W']);
+  if (!filters.some(([value]) => value === filter)) filter = filters[0]?.[0] || 'color';
+  loadConfigPills(layouts, filters);
+}
+function loadConfigPills(layouts, filters) {
+  pills(document.getElementById('layouts'), layouts.map((key) => [
+    key, `${key} ${key === '1' ? 'photo' : 'photos'}`,
+  ]), layout, (value) => {
+    layout = value;
+    loadConfigPills(layouts, filters);
+  });
+  pills(document.getElementById('filters'), filters, filter, (value) => {
+    filter = value;
+    loadConfigPills(layouts, filters);
+  });
   renderStageAspect();
 }
 async function startCamera() {
-  startButton.disabled = true;
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    document.getElementById('trouble').hidden = false;
+  openCameraButton.disabled = true;
+  document.getElementById('cameraError').hidden = true;
+  statusEl.textContent = 'Opening the camera…';
+  if (!navigator.mediaDevices?.getUserMedia) {
+    document.getElementById('cameraError').textContent =
+      'This browser cannot open the camera here. Use the secure Photo Booth link or Share Photos.';
+    document.getElementById('cameraError').hidden = false;
+    openCameraButton.disabled = false;
+    statusEl.textContent = '';
     return;
   }
-  if (stream) stream.getTracks().forEach((track) => track.stop());
-  stream = null;
-  video.srcObject = null;
-  document.getElementById('trouble').hidden = true;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 960 } },
@@ -271,74 +167,87 @@ async function startCamera() {
     });
     video.srcObject = stream;
     await video.play();
+    welcome.hidden = true;
+    cameraTools.hidden = false;
+    statusEl.textContent = '';
   } catch {
     stream?.getTracks().forEach((track) => track.stop());
     stream = null;
-    document.getElementById('trouble').hidden = false;
-    statusEl.textContent = 'Allow camera access, then choose Retry Camera.';
+    document.getElementById('cameraError').textContent =
+      "Camera access was not granted. Check your browser's permission, then tap the button to try again.";
+    document.getElementById('cameraError').hidden = false;
+    statusEl.textContent = '';
+  } finally {
+    openCameraButton.disabled = false;
   }
 }
 video.addEventListener('loadedmetadata', () => {
-  resizeStickerLayer();
   startButton.disabled = capturing || video.videoWidth <= 0;
 });
-window.addEventListener('resize', resizeStickerLayer);
-const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function countdown() {
-  const el = document.getElementById('count');
-  el.style.display = 'flex';
-  for (const n of ['3', '2', '1']) { el.textContent = n; await sleep(800); }
-  el.style.display = 'none';
+  const element = document.getElementById('count');
+  element.style.display = 'flex';
+  for (const number of ['3', '2', '1']) {
+    element.textContent = number;
+    await sleep(800);
+  }
+  element.style.display = 'none';
 }
 function capture() {
   if (!video.videoWidth || !video.videoHeight) throw new Error('Camera is not ready');
   const cell = CELLS[layout];
   const canvas = document.createElement('canvas');
-  canvas.width = cell.width; canvas.height = cell.height;
-  const ctx = canvas.getContext('2d');
-  const vw = video.videoWidth, vh = video.videoHeight;
-  const target = cell.width / cell.height, src = vw / vh;
-  let sw, sh, sx, sy;
-  if (src > target) { sh = vh; sw = vh * target; sx = (vw - sw) / 2; sy = 0; }
-  else { sw = vw; sh = vw / target; sx = 0; sy = (vh - sh) / 2; }
-  ctx.translate(canvas.width, 0); ctx.scale(-1, 1); // un-mirror
-  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-  ctx.save();
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  stickers.forEach((sticker) => {
-    const image = stickerImages.get(sticker.key);
-    if (!image || !image.complete || !image.naturalWidth) return;
-    const width = sticker.size * canvas.width;
-    const height = width * image.naturalHeight / image.naturalWidth;
-    const centerX = sticker.x * canvas.width;
-    const centerY = sticker.y * canvas.height;
-    ctx.save();
-    ctx.translate(centerX, centerY);
-    ctx.rotate(sticker.rot * Math.PI / 180);
-    ctx.drawImage(image, -width / 2, -height / 2, width, height);
-    ctx.restore();
-  });
-  ctx.restore();
+  canvas.width = cell.width;
+  canvas.height = cell.height;
+  const context = canvas.getContext('2d');
+  const videoWidth = video.videoWidth;
+  const videoHeight = video.videoHeight;
+  const targetRatio = cell.width / cell.height;
+  const sourceRatio = videoWidth / videoHeight;
+  let sourceWidth;
+  let sourceHeight;
+  let sourceX;
+  let sourceY;
+  if (sourceRatio > targetRatio) {
+    sourceHeight = videoHeight;
+    sourceWidth = videoHeight * targetRatio;
+    sourceX = (videoWidth - sourceWidth) / 2;
+    sourceY = 0;
+  } else {
+    sourceWidth = videoWidth;
+    sourceHeight = videoWidth / targetRatio;
+    sourceX = 0;
+    sourceY = (videoHeight - sourceHeight) / 2;
+  }
+  context.translate(canvas.width, 0);
+  context.scale(-1, 1);
+  context.drawImage(video, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
   return canvas.toDataURL('image/jpeg', 0.92);
 }
 startButton.addEventListener('click', async () => {
-  if (!stream) { document.getElementById('trouble').hidden = false; return; }
+  if (!stream) {
+    welcome.hidden = false;
+    cameraTools.hidden = true;
+    return;
+  }
   capturing = true;
   startButton.disabled = true;
   document.getElementById('result').hidden = true;
   try {
     const shots = [];
     const count = Number(layout);
-    for (let i = 0; i < count; i++) {
-      statusEl.textContent = `Photo ${i + 1} of ${count} — get ready!`;
+    for (let index = 0; index < count; index += 1) {
+      statusEl.textContent = `Photo ${index + 1} of ${count} — get ready!`;
       await countdown();
       const flash = document.getElementById('flash');
-      flash.classList.add('on'); setTimeout(() => flash.classList.remove('on'), 120);
+      flash.classList.add('on');
+      setTimeout(() => flash.classList.remove('on'), 120);
       shots.push(capture());
       await sleep(400);
     }
     statusEl.textContent = 'Making your framed picture…';
-    const r = await fetch('/api/upload-booth', {
+    const response = await fetch(await partyGalleryApi('/api/upload-booth'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -348,16 +257,17 @@ startButton.addEventListener('click', async () => {
         caption: document.getElementById('caption').value,
       }),
     });
-    const data = await r.json();
-    if (!r.ok || !data.url) throw new Error(data.error || 'failed');
-    document.getElementById('finalImg').src = data.url;
+    const data = await response.json();
+    if (!response.ok || !data.url) throw new Error(data.error || 'Upload failed.');
+    document.getElementById('finalImg').src =
+      new URL(data.url, await partyGalleryApi('/api/upload-booth')).href;
     document.getElementById('result').hidden = false;
     statusEl.textContent = 'Done — it is on the big screen too!';
     scheduleKioskReturn(15000);
-  } catch (e) {
-    statusEl.textContent = e.message === 'Camera is not ready'
+  } catch (error) {
+    statusEl.textContent = error.message === 'Camera is not ready'
       ? 'The camera is still starting — please try again.'
-      : 'Something went wrong making that one — please try again.';
+      : 'Something went wrong making that one — please check your connection and try again.';
   } finally {
     capturing = false;
     startButton.disabled = !video.videoWidth;
@@ -369,6 +279,7 @@ document.getElementById('again').addEventListener('click', () => {
   statusEl.textContent = '';
   resetInactivityTimer();
 });
+openCameraButton.addEventListener('click', startCamera);
 if (kioskMode) {
   document.getElementById('albumBack').hidden = false;
   for (const eventName of ['pointerdown', 'touchstart', 'keydown']) {
@@ -376,20 +287,17 @@ if (kioskMode) {
   }
   resetInactivityTimer();
 }
-document.getElementById('retry').addEventListener('click', startCamera);
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
-    stream?.getTracks().forEach((track) => track.stop());
-    stream = null;
-    video.srcObject = null;
-    startButton.disabled = true;
-  } else {
-    startCamera();
-  }
+  if (!document.hidden) return;
+  stream?.getTracks().forEach((track) => track.stop());
+  stream = null;
+  video.srcObject = null;
+  startButton.disabled = true;
+  cameraTools.hidden = true;
+  welcome.hidden = false;
+  statusEl.textContent = 'Camera paused. Tap the button again when you are ready.';
 });
-setupStickerControls();
 loadConfig();
-startCamera();
 </script>
 </body>
 </html>

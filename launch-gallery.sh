@@ -12,6 +12,38 @@ HEALTH_URL="http://localhost:3000/api/health"
 
 mkdir -p qr
 
+REMOTE_URL="$(git remote get-url origin)"
+if [[ "$REMOTE_URL" =~ github\.com[:/]([^/]+/[^/.]+)(\.git)?$ ]]; then
+  REPOSITORY_SLUG="${BASH_REMATCH[1]}"
+else
+  echo "Could not determine the GitHub repository from origin: $REMOTE_URL" >&2
+  exit 1
+fi
+GITHUB_OWNER="${REPOSITORY_SLUG%/*}"
+REPOSITORY_NAME="${REPOSITORY_SLUG#*/}"
+PAGES_BASE_URL="https://${GITHUB_OWNER,,}.github.io/${REPOSITORY_NAME,,}"
+
+find_running_tunnel_url() {
+  local pid command process_cwd logfile candidate
+  while IFS= read -r pid; do
+    command="$(ps -p "$pid" -o args= 2>/dev/null || true)"
+    process_cwd="$(readlink "/proc/$pid/cwd" 2>/dev/null || true)"
+    [[ "$command" == *"cloudflared tunnel --url http://localhost:3000"* ]] || continue
+    [[ "$process_cwd" == "$PROJECT_DIR" || "$command" == *"$PROJECT_DIR/qr/cloudflared.log"* ]] || continue
+    logfile="$PROJECT_DIR/qr/cloudflared.log"
+    if [[ "$command" =~ --logfile[[:space:]]([^[:space:]]+) ]]; then
+      logfile="${BASH_REMATCH[1]}"
+    fi
+    while IFS= read -r candidate; do
+      if curl --max-time 10 -fsS "${candidate}/api/health" >/dev/null 2>&1; then
+        printf '%s\n' "$candidate"
+        return 0
+      fi
+    done < <(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' "$logfile" 2>/dev/null | sort -u)
+  done < <(ps -eo pid=,comm=,args= | awk '$2 == "cloudflared" && index($0, "tunnel --url http://localhost:3000") {print $1}')
+  return 1
+}
+
 find_server_pid() {
   local pid command process_cwd
   while IFS= read -r pid; do
@@ -61,6 +93,10 @@ if [ -s qr/active-url.txt ]; then
 fi
 
 if [ -z "$TUNNEL_URL" ]; then
+  TUNNEL_URL="$(find_running_tunnel_url || true)"
+fi
+
+if [ -z "$TUNNEL_URL" ]; then
   CLOUDFLARED="${CLOUDFLARED:-$HOME/.local/bin/cloudflared}"
   if [ ! -x "$CLOUDFLARED" ]; then
     CLOUDFLARED="$(command -v cloudflared || true)"
@@ -105,10 +141,51 @@ if [ -z "$TUNNEL_URL" ]; then
 fi
 
 printf '%s\n' "$TUNNEL_URL" > qr/active-url.txt
-node make-qr.js "${TUNNEL_URL}/upload.html" qr/upload-qr.png
-node make-qr.js "${TUNNEL_URL}/booth.html" qr/booth-qr.png
-node make-qr.js "${TUNNEL_URL}/react.html" qr/react-qr.png
 curl --max-time 10 -fsS "${TUNNEL_URL}/api/config" >/dev/null
+
+if [[ "$(git branch --show-current)" != "main" ]]; then
+  echo "Tunnel configuration publishing requires the main branch." >&2
+  exit 1
+fi
+if ! git diff --cached --quiet; then
+  echo "Refusing to publish tunnel configuration while unrelated changes are staged." >&2
+  exit 1
+fi
+node - "$TUNNEL_URL" <<'NODE'
+const fs = require('fs');
+const [url] = process.argv.slice(2);
+const target = 'public/tunnel-config.json';
+let current = '';
+try { current = JSON.parse(fs.readFileSync(target, 'utf8')).url || ''; } catch {}
+if (current !== url) {
+  const temporary = `${target}.tmp`;
+  fs.writeFileSync(temporary, `${JSON.stringify({ url, updatedAt: new Date().toISOString() }, null, 2)}\n`);
+  fs.renameSync(temporary, target);
+}
+NODE
+if ! git diff --quiet -- public/tunnel-config.json; then
+  git add public/tunnel-config.json
+  git commit -m "Update active public tunnel endpoint"
+  git push origin main
+fi
+
+QR_BASE_URL="$TUNNEL_URL"
+for _ in $(seq 1 30); do
+  PUBLISHED_CONFIG="$(curl --max-time 5 -fsSL \
+    "${PAGES_BASE_URL}/tunnel-config.json?t=$(date +%s)" 2>/dev/null || true)"
+  PUBLISHED_TUNNEL="$(node -e 'try { process.stdout.write(JSON.parse(process.argv[1]).url || "") } catch {}' \
+    "$PUBLISHED_CONFIG")"
+  if [ "$PUBLISHED_TUNNEL" = "$TUNNEL_URL" ] \
+    && curl --max-time 5 -fsSL "${PAGES_BASE_URL}/upload.html" >/dev/null 2>&1; then
+    QR_BASE_URL="$PAGES_BASE_URL"
+    break
+  fi
+  sleep 2
+done
+printf '%s\n' "$QR_BASE_URL" > qr/qr-base-url.txt
+node make-qr.js "${QR_BASE_URL}/upload.html" qr/upload-qr.png
+node make-qr.js "${QR_BASE_URL}/booth.html" qr/booth-qr.png
+node make-qr.js "${QR_BASE_URL}/react.html" qr/react-qr.png
 
 if ! adb -s "$ADB_SERIAL" get-state 2>/dev/null | grep -qx device; then
   echo "Android tablet $ADB_SERIAL is not connected." >&2
@@ -168,9 +245,9 @@ cat <<EOF
 ================ Party Gallery is live ================
 Local Gallery URL:        ${GALLERY_URL}
 Printable QR Sheet URL:   http://${LOCAL_IP}:3000/print-qrs.html
-Public Upload URL:        ${TUNNEL_URL}/upload.html
-Public Photo Booth URL:   ${TUNNEL_URL}/booth.html
-Public Reactions URL:    ${TUNNEL_URL}/react.html
+Public Upload URL:        ${QR_BASE_URL}/upload.html
+Public Photo Booth URL:   ${QR_BASE_URL}/booth.html
+Public Reactions URL:     ${QR_BASE_URL}/react.html
 Kiosk App:                ${KIOSK_PACKAGE}/.MainActivity
 =======================================================
 EOF

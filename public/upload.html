@@ -35,6 +35,7 @@
   <button id="again" type="button" hidden onclick="location.reload()">Add More Photos</button>
 </div>
 
+<script src="backend.js"></script>
 <script>
 const picker = document.getElementById('picker');
 const statusEl = document.getElementById('status');
@@ -94,10 +95,16 @@ function addRow(name) {
   return status;
 }
 
-function send(form, onProgress) {
+async function send(form, onProgress) {
+  let endpoint;
+  try {
+    endpoint = await partyGalleryApi('/api/upload-general');
+  } catch (error) {
+    return { status: 0, retryAfter: 60, data: {}, error };
+  }
   return new Promise((resolve) => {
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/api/upload-general');
+    xhr.open('POST', endpoint);
     xhr.timeout = 120000;
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
@@ -164,6 +171,7 @@ picker.addEventListener('change', async () => {
         statusEl.textContent = `Uploading… ${percent}% (${start + 1}–${start + slice.length} of ${prepared.length})`;
         setBar(percent);
       });
+      if (result.error) statusEl.textContent = 'Could not load the live event connection. Retrying…';
       if (result.status === 429 && attempt < RETRIES) {
         attempt += 1;
         for (let seconds = result.retryAfter; seconds > 0; seconds -= 1) {
